@@ -84,7 +84,7 @@ type IdentityProviderRequest struct {
 
 	Type string `json:"type,omitempty"`
 
-	Domains          []string         `json:"domains,omitempty"`
+	Domains          *[]string        `json:"domains,omitempty"`
 	MetadataXML      string           `json:"metadata_xml,omitempty"`
 	MetadataURL      string           `json:"metadata_url,omitempty"`
 	AttributeMapping AttributeMapping `json:"attribute_mapping,omitempty"`

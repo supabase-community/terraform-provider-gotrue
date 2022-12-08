@@ -90,9 +90,13 @@ func resourceIdentityProviderUpdate(ctx context.Context, d *schema.ResourceData,
 	}
 
 	if d.HasChange("domains") {
+		domains := make([]string, 0, 10)
+
 		for _, domain := range d.Get("domains").(*schema.Set).List() {
-			template.Domains = append(template.Domains, domain.(string))
+			domains = append(domains, domain.(string))
 		}
+
+		template.Domains = &domains
 	}
 
 	if d.HasChange("attribute_mapping") {
@@ -143,7 +147,7 @@ func resourceIdentityProviderCreate(ctx context.Context, d *schema.ResourceData,
 			domains = append(domains, domain.(string))
 		}
 
-		template.Domains = domains
+		template.Domains = &domains
 	}
 
 	if keys, ok := d.GetOk("attribute_mapping"); ok && keys.(string) != "" {
