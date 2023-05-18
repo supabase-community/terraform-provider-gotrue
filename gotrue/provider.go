@@ -168,6 +168,23 @@ var (
 	domainPattern = regexp.MustCompile("^[a-z0-9-]+(.[a-z0-9-]+)*$")
 )
 
+// reMarshalJSON parses a JSON object into a map, and then marshals the map
+// into JSON again, using the stable JSON encoding properties of Go.
+func reMarshalJSON(jsonString string) string {
+	value := make(map[string]any)
+
+	if err := json.Unmarshal([]byte(jsonString), &value); err != nil {
+		return jsonString
+	}
+
+	data, err := json.Marshal(value)
+	if err != nil {
+		return jsonString
+	}
+
+	return string(data)
+}
+
 func resourceIdentityProvider() *schema.Resource {
 	return &schema.Resource{
 		CreateContext: resourceIdentityProviderCreate,
@@ -203,8 +220,15 @@ func resourceIdentityProvider() *schema.Resource {
 				Optional: true,
 			},
 			"attribute_mapping": {
-				Type:     schema.TypeString,
-				Optional: true,
+				Type:                  schema.TypeString,
+				Optional:              true,
+				DiffSuppressOnRefresh: true,
+				DiffSuppressFunc: func(k, oldValue, newValue string, data *schema.ResourceData) bool {
+					// suppress the diff if the old and new
+					// values are the equivalent when
+					// encoded with stable JSON
+					return reMarshalJSON(oldValue) == reMarshalJSON(newValue)
+				},
 				ValidateDiagFunc: func(value interface{}, path cty.Path) diag.Diagnostics {
 					var diags diag.Diagnostics
 
