@@ -416,8 +416,8 @@ func (c *client) DeleteCustomOAuthProvider(ctx context.Context, identifier strin
 
 	defer res.Body.Close()
 
-	if res.StatusCode != http.StatusOK {
-		return parseError(res, http.StatusOK, fmt.Sprintf("deleting custom OAuth provider with identifier %q", identifier))
+	if res.StatusCode != http.StatusNoContent {
+		return parseError(res, http.StatusNoContent, fmt.Sprintf("deleting custom OAuth provider with identifier %q", identifier))
 	}
 
 	return nil
