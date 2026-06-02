@@ -298,10 +298,9 @@ type CustomOAuthProviderResponse struct {
 }
 
 func (c *client) GetCustomOAuthProvider(ctx context.Context, identifier string) (*CustomOAuthProviderResponse, error) {
-	url := c.BaseURL
-	url.Path += "/admin/custom-providers/" + identifier
+	rawURL := c.BaseURL.String() + "/admin/custom-providers/" + url.PathEscape(identifier)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -366,15 +365,14 @@ func (c *client) CreateCustomOAuthProvider(ctx context.Context, template *Custom
 }
 
 func (c *client) UpdateCustomOAuthProvider(ctx context.Context, identifier string, template *CustomOAuthProviderRequest) (*CustomOAuthProviderResponse, error) {
-	url := c.BaseURL
-	url.Path += "/admin/custom-providers/" + identifier
+	rawURL := c.BaseURL.String() + "/admin/custom-providers/" + url.PathEscape(identifier)
 
 	buffer := bytes.NewBuffer(make([]byte, 0))
 	if err := json.NewEncoder(buffer).Encode(template); err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url.String(), buffer)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, rawURL, buffer)
 	if err != nil {
 		return nil, err
 	}
@@ -403,10 +401,9 @@ func (c *client) UpdateCustomOAuthProvider(ctx context.Context, identifier strin
 }
 
 func (c *client) DeleteCustomOAuthProvider(ctx context.Context, identifier string) error {
-	url := c.BaseURL
-	url.Path += "/admin/custom-providers/" + identifier
+	rawURL := c.BaseURL.String() + "/admin/custom-providers/" + url.PathEscape(identifier)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, rawURL, nil)
 	if err != nil {
 		return err
 	}

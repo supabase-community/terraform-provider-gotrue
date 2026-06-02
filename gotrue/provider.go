@@ -169,49 +169,56 @@ var (
 	customIdentPattern = regexp.MustCompile("^custom:")
 )
 
-func boolPtr(b bool) *bool { return &b }
-
 func resourceCustomOAuthProviderSet(provider *adminclient.CustomOAuthProviderResponse, d *schema.ResourceData) diag.Diagnostics {
 	d.SetId(provider.Identifier)
 
-	fields := map[string]interface{}{
-		"provider_type": provider.ProviderType,
-		"identifier":    provider.Identifier,
-		"name":          provider.Name,
-		"client_id":     provider.ClientID,
-		"created_at":    provider.CreatedAt.UTC().Format(time.RFC3339),
-		"updated_at":    provider.UpdatedAt.UTC().Format(time.RFC3339),
+	discoveryURL := ""
+	if provider.DiscoveryURL != nil {
+		discoveryURL = *provider.DiscoveryURL
 	}
 
-	if provider.Issuer != "" {
-		fields["issuer"] = provider.Issuer
-	}
-	if provider.DiscoveryURL != nil {
-		fields["discovery_url"] = *provider.DiscoveryURL
-	}
-	if provider.AuthorizationURL != "" {
-		fields["authorization_url"] = provider.AuthorizationURL
-	}
-	if provider.TokenURL != "" {
-		fields["token_url"] = provider.TokenURL
-	}
-	if provider.UserinfoURL != "" {
-		fields["userinfo_url"] = provider.UserinfoURL
-	}
+	jwksURI := ""
 	if provider.JwksURI != nil {
-		fields["jwks_uri"] = *provider.JwksURI
+		jwksURI = *provider.JwksURI
 	}
+
+	pkceEnabled := false
 	if provider.PKCEEnabled != nil {
-		fields["pkce_enabled"] = *provider.PKCEEnabled
+		pkceEnabled = *provider.PKCEEnabled
 	}
+
+	enabled := false
 	if provider.Enabled != nil {
-		fields["enabled"] = *provider.Enabled
+		enabled = *provider.Enabled
 	}
+
+	emailOptional := false
 	if provider.EmailOptional != nil {
-		fields["email_optional"] = *provider.EmailOptional
+		emailOptional = *provider.EmailOptional
 	}
+
+	skipNonceCheck := false
 	if provider.SkipNonceCheck != nil {
-		fields["skip_nonce_check"] = *provider.SkipNonceCheck
+		skipNonceCheck = *provider.SkipNonceCheck
+	}
+
+	fields := map[string]interface{}{
+		"provider_type":     provider.ProviderType,
+		"identifier":        provider.Identifier,
+		"name":              provider.Name,
+		"client_id":         provider.ClientID,
+		"created_at":        provider.CreatedAt.UTC().Format(time.RFC3339),
+		"updated_at":        provider.UpdatedAt.UTC().Format(time.RFC3339),
+		"issuer":            provider.Issuer,
+		"discovery_url":     discoveryURL,
+		"authorization_url": provider.AuthorizationURL,
+		"token_url":         provider.TokenURL,
+		"userinfo_url":      provider.UserinfoURL,
+		"jwks_uri":          jwksURI,
+		"pkce_enabled":      pkceEnabled,
+		"enabled":           enabled,
+		"email_optional":    emailOptional,
+		"skip_nonce_check":  skipNonceCheck,
 	}
 
 	for k, v := range fields {
@@ -220,42 +227,44 @@ func resourceCustomOAuthProviderSet(provider *adminclient.CustomOAuthProviderRes
 		}
 	}
 
-	if len(provider.Scopes) > 0 {
-		if err := d.Set("scopes", provider.Scopes); err != nil {
-			return diag.FromErr(err)
-		}
+	if err := d.Set("scopes", provider.Scopes); err != nil {
+		return diag.FromErr(err)
 	}
 
-	if len(provider.AcceptableClientIDs) > 0 {
-		if err := d.Set("acceptable_client_ids", provider.AcceptableClientIDs); err != nil {
-			return diag.FromErr(err)
-		}
+	if err := d.Set("acceptable_client_ids", provider.AcceptableClientIDs); err != nil {
+		return diag.FromErr(err)
 	}
 
+	attributeMapping := ""
 	if len(provider.AttributeMapping) > 0 {
 		raw, err := json.Marshal(provider.AttributeMapping)
 		if err != nil {
 			return diag.FromErr(err)
 		}
-		if err := d.Set("attribute_mapping", string(raw)); err != nil {
-			return diag.FromErr(err)
-		}
+		attributeMapping = string(raw)
+	}
+	if err := d.Set("attribute_mapping", attributeMapping); err != nil {
+		return diag.FromErr(err)
 	}
 
+	authorizationParams := ""
 	if len(provider.AuthorizationParams) > 0 {
 		raw, err := json.Marshal(provider.AuthorizationParams)
 		if err != nil {
 			return diag.FromErr(err)
 		}
-		if err := d.Set("authorization_params", string(raw)); err != nil {
-			return diag.FromErr(err)
-		}
+		authorizationParams = string(raw)
+	}
+	if err := d.Set("authorization_params", authorizationParams); err != nil {
+		return diag.FromErr(err)
 	}
 
+	discoveryDocument := ""
 	if len(provider.DiscoveryDocument) > 0 {
-		if err := d.Set("discovery_document", string(provider.DiscoveryDocument)); err != nil {
-			return diag.FromErr(err)
-		}
+		discoveryDocument = string(provider.DiscoveryDocument)
+	}
+	if err := d.Set("discovery_document", discoveryDocument); err != nil {
+		return diag.FromErr(err)
 	}
 
 	return nil
@@ -303,22 +312,17 @@ func resourceCustomOAuthProviderCreate(ctx context.Context, d *schema.ResourceDa
 		s := v.(string)
 		template.JwksURI = &s
 	}
-	if v, ok := d.GetOkExists("pkce_enabled"); ok {
-		b := v.(bool)
-		template.PKCEEnabled = &b
-	}
-	if v, ok := d.GetOkExists("enabled"); ok {
-		b := v.(bool)
-		template.Enabled = &b
-	}
-	if v, ok := d.GetOkExists("email_optional"); ok {
-		b := v.(bool)
-		template.EmailOptional = &b
-	}
-	if v, ok := d.GetOkExists("skip_nonce_check"); ok {
-		b := v.(bool)
-		template.SkipNonceCheck = &b
-	}
+	b := d.Get("pkce_enabled").(bool)
+	template.PKCEEnabled = &b
+
+	b = d.Get("enabled").(bool)
+	template.Enabled = &b
+
+	b = d.Get("email_optional").(bool)
+	template.EmailOptional = &b
+
+	b = d.Get("skip_nonce_check").(bool)
+	template.SkipNonceCheck = &b
 
 	if v, ok := d.GetOk("scopes"); ok {
 		raw := v.([]interface{})
@@ -488,6 +492,9 @@ func resourceCustomOAuthProvider() *schema.Resource {
 		ReadContext:   resourceCustomOAuthProviderRead,
 		UpdateContext: resourceCustomOAuthProviderUpdate,
 		DeleteContext: resourceCustomOAuthProviderDelete,
+		Importer: &schema.ResourceImporter{
+			StateContext: schema.ImportStatePassthroughContext,
+		},
 		Schema: map[string]*schema.Schema{
 			"provider_type": {
 				Type:     schema.TypeString,
