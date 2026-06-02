@@ -259,7 +259,6 @@ type CustomOAuthProviderRequest struct {
 	AcceptableClientIDs []string               `json:"acceptable_client_ids,omitempty"`
 	Scopes              []string               `json:"scopes,omitempty"`
 	PKCEEnabled         *bool                  `json:"pkce_enabled,omitempty"`
-	AttributeMapping    map[string]interface{} `json:"attribute_mapping,omitempty"`
 	AuthorizationParams map[string]interface{} `json:"authorization_params,omitempty"`
 	Enabled             *bool                  `json:"enabled,omitempty"`
 	EmailOptional       *bool                  `json:"email_optional,omitempty"`

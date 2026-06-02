@@ -207,8 +207,6 @@ func resourceCustomOAuthProviderSet(provider *adminclient.CustomOAuthProviderRes
 		"identifier":        provider.Identifier,
 		"name":              provider.Name,
 		"client_id":         provider.ClientID,
-		"created_at":        provider.CreatedAt.UTC().Format(time.RFC3339),
-		"updated_at":        provider.UpdatedAt.UTC().Format(time.RFC3339),
 		"issuer":            provider.Issuer,
 		"discovery_url":     discoveryURL,
 		"authorization_url": provider.AuthorizationURL,
@@ -232,18 +230,6 @@ func resourceCustomOAuthProviderSet(provider *adminclient.CustomOAuthProviderRes
 	}
 
 	if err := d.Set("acceptable_client_ids", provider.AcceptableClientIDs); err != nil {
-		return diag.FromErr(err)
-	}
-
-	attributeMapping := ""
-	if len(provider.AttributeMapping) > 0 {
-		raw, err := json.Marshal(provider.AttributeMapping)
-		if err != nil {
-			return diag.FromErr(err)
-		}
-		attributeMapping = string(raw)
-	}
-	if err := d.Set("attribute_mapping", attributeMapping); err != nil {
 		return diag.FromErr(err)
 	}
 
@@ -342,14 +328,6 @@ func resourceCustomOAuthProviderCreate(ctx context.Context, d *schema.ResourceDa
 		template.AcceptableClientIDs = ids
 	}
 
-	if v, ok := d.GetOk("attribute_mapping"); ok && v.(string) != "" {
-		var mapping map[string]interface{}
-		if err := json.Unmarshal([]byte(v.(string)), &mapping); err != nil {
-			return diag.FromErr(err)
-		}
-		template.AttributeMapping = mapping
-	}
-
 	if v, ok := d.GetOk("authorization_params"); ok && v.(string) != "" {
 		var params map[string]interface{}
 		if err := json.Unmarshal([]byte(v.(string)), &params); err != nil {
@@ -433,15 +411,6 @@ func resourceCustomOAuthProviderUpdate(ctx context.Context, d *schema.ResourceDa
 			ids[i] = s.(string)
 		}
 		template.AcceptableClientIDs = ids
-	}
-	if d.HasChange("attribute_mapping") {
-		if v, ok := d.GetOk("attribute_mapping"); ok && v.(string) != "" {
-			var mapping map[string]interface{}
-			if err := json.Unmarshal([]byte(v.(string)), &mapping); err != nil {
-				return diag.FromErr(err)
-			}
-			template.AttributeMapping = mapping
-		}
 	}
 	if d.HasChange("authorization_params") {
 		if v, ok := d.GetOk("authorization_params"); ok && v.(string) != "" {
@@ -556,11 +525,6 @@ func resourceCustomOAuthProvider() *schema.Resource {
 				Optional: true,
 				Computed: true,
 			},
-			"attribute_mapping": {
-				Type:             schema.TypeString,
-				Optional:         true,
-				ValidateDiagFunc: validateJSON,
-			},
 			"authorization_params": {
 				Type:             schema.TypeString,
 				Optional:         true,
@@ -606,14 +570,6 @@ func resourceCustomOAuthProvider() *schema.Resource {
 				Optional: true,
 			},
 			"id": {
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"created_at": {
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"updated_at": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
