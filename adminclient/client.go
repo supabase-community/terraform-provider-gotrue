@@ -331,7 +331,7 @@ func (c *client) CreateCustomOAuthProvider(ctx context.Context, template *Custom
 	url.Path += "/admin/custom-providers"
 
 	buffer := bytes.NewBuffer(make([]byte, 0))
-	if err := json.NewEncoder(buffer).Encode(template); err != nil {
+	if err := json.NewEncoder(buffer).Encode(template); err != nil { // #nosec G117 -- intentionally marshaling client_secret in API request body
 		return nil, err
 	}
 
@@ -367,7 +367,7 @@ func (c *client) UpdateCustomOAuthProvider(ctx context.Context, identifier strin
 	rawURL := c.BaseURL.String() + "/admin/custom-providers/" + url.PathEscape(identifier)
 
 	buffer := bytes.NewBuffer(make([]byte, 0))
-	if err := json.NewEncoder(buffer).Encode(template); err != nil {
+	if err := json.NewEncoder(buffer).Encode(template); err != nil { // #nosec G117 -- intentionally marshaling client_secret in API request body
 		return nil, err
 	}
 
