@@ -165,8 +165,421 @@ func resourceIdentityProviderCreate(ctx context.Context, d *schema.ResourceData,
 }
 
 var (
-	domainPattern = regexp.MustCompile("^[a-z0-9-]+(.[a-z0-9-]+)*$")
+	domainPattern      = regexp.MustCompile("^[a-z0-9-]+(.[a-z0-9-]+)*$")
+	customIdentPattern = regexp.MustCompile("^custom:")
 )
+
+func resourceCustomOAuthProviderSet(provider *adminclient.CustomOAuthProviderResponse, d *schema.ResourceData) diag.Diagnostics {
+	d.SetId(provider.Identifier)
+
+	discoveryURL := ""
+	if provider.DiscoveryURL != nil {
+		discoveryURL = *provider.DiscoveryURL
+	}
+
+	jwksURI := ""
+	if provider.JwksURI != nil {
+		jwksURI = *provider.JwksURI
+	}
+
+	pkceEnabled := false
+	if provider.PKCEEnabled != nil {
+		pkceEnabled = *provider.PKCEEnabled
+	}
+
+	enabled := false
+	if provider.Enabled != nil {
+		enabled = *provider.Enabled
+	}
+
+	emailOptional := false
+	if provider.EmailOptional != nil {
+		emailOptional = *provider.EmailOptional
+	}
+
+	skipNonceCheck := false
+	if provider.SkipNonceCheck != nil {
+		skipNonceCheck = *provider.SkipNonceCheck
+	}
+
+	fields := map[string]interface{}{
+		"provider_type":     provider.ProviderType,
+		"identifier":        provider.Identifier,
+		"name":              provider.Name,
+		"client_id":         provider.ClientID,
+		"issuer":            provider.Issuer,
+		"discovery_url":     discoveryURL,
+		"authorization_url": provider.AuthorizationURL,
+		"token_url":         provider.TokenURL,
+		"userinfo_url":      provider.UserinfoURL,
+		"jwks_uri":          jwksURI,
+		"pkce_enabled":      pkceEnabled,
+		"enabled":           enabled,
+		"email_optional":    emailOptional,
+		"skip_nonce_check":  skipNonceCheck,
+	}
+
+	for k, v := range fields {
+		if err := d.Set(k, v); err != nil {
+			return diag.FromErr(err)
+		}
+	}
+
+	if err := d.Set("scopes", provider.Scopes); err != nil {
+		return diag.FromErr(err)
+	}
+
+	if err := d.Set("acceptable_client_ids", provider.AcceptableClientIDs); err != nil {
+		return diag.FromErr(err)
+	}
+
+	authorizationParams := ""
+	if len(provider.AuthorizationParams) > 0 {
+		raw, err := json.Marshal(provider.AuthorizationParams)
+		if err != nil {
+			return diag.FromErr(err)
+		}
+		authorizationParams = string(raw)
+	}
+	if err := d.Set("authorization_params", authorizationParams); err != nil {
+		return diag.FromErr(err)
+	}
+
+	discoveryDocument := ""
+	if len(provider.DiscoveryDocument) > 0 {
+		discoveryDocument = string(provider.DiscoveryDocument)
+	}
+	if err := d.Set("discovery_document", discoveryDocument); err != nil {
+		return diag.FromErr(err)
+	}
+
+	return nil
+}
+
+func resourceCustomOAuthProviderRead(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+	client := m.(adminclient.Client)
+
+	provider, err := client.GetCustomOAuthProvider(ctx, d.Id())
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	return resourceCustomOAuthProviderSet(provider, d)
+}
+
+func resourceCustomOAuthProviderCreate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+	client := m.(adminclient.Client)
+
+	template := &adminclient.CustomOAuthProviderRequest{
+		ProviderType: d.Get("provider_type").(string),
+		Identifier:   d.Get("identifier").(string),
+		Name:         d.Get("name").(string),
+		ClientID:     d.Get("client_id").(string),
+		ClientSecret: d.Get("client_secret").(string),
+	}
+
+	if v, ok := d.GetOk("issuer"); ok {
+		template.Issuer = v.(string)
+	}
+	if v, ok := d.GetOk("discovery_url"); ok {
+		s := v.(string)
+		template.DiscoveryURL = &s
+	}
+	if v, ok := d.GetOk("authorization_url"); ok {
+		template.AuthorizationURL = v.(string)
+	}
+	if v, ok := d.GetOk("token_url"); ok {
+		template.TokenURL = v.(string)
+	}
+	if v, ok := d.GetOk("userinfo_url"); ok {
+		template.UserinfoURL = v.(string)
+	}
+	if v, ok := d.GetOk("jwks_uri"); ok {
+		s := v.(string)
+		template.JwksURI = &s
+	}
+	b := d.Get("pkce_enabled").(bool)
+	template.PKCEEnabled = &b
+
+	b = d.Get("enabled").(bool)
+	template.Enabled = &b
+
+	b = d.Get("email_optional").(bool)
+	template.EmailOptional = &b
+
+	b = d.Get("skip_nonce_check").(bool)
+	template.SkipNonceCheck = &b
+
+	if v, ok := d.GetOk("scopes"); ok {
+		raw := v.([]interface{})
+		scopes := make([]string, len(raw))
+		for i, s := range raw {
+			scopes[i] = s.(string)
+		}
+		template.Scopes = scopes
+	}
+
+	if v, ok := d.GetOk("acceptable_client_ids"); ok {
+		raw := v.([]interface{})
+		ids := make([]string, len(raw))
+		for i, s := range raw {
+			ids[i] = s.(string)
+		}
+		template.AcceptableClientIDs = ids
+	}
+
+	if v, ok := d.GetOk("authorization_params"); ok && v.(string) != "" {
+		var params map[string]interface{}
+		if err := json.Unmarshal([]byte(v.(string)), &params); err != nil {
+			return diag.FromErr(err)
+		}
+		template.AuthorizationParams = params
+	}
+
+	provider, err := client.CreateCustomOAuthProvider(ctx, template)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	return resourceCustomOAuthProviderSet(provider, d)
+}
+
+func resourceCustomOAuthProviderUpdate(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+	client := m.(adminclient.Client)
+
+	template := &adminclient.CustomOAuthProviderRequest{}
+
+	if d.HasChange("name") {
+		template.Name = d.Get("name").(string)
+	}
+	if d.HasChange("client_id") {
+		template.ClientID = d.Get("client_id").(string)
+	}
+	if d.HasChange("client_secret") {
+		if v := d.Get("client_secret").(string); v != "" {
+			template.ClientSecret = v
+		}
+	}
+	if d.HasChange("issuer") {
+		template.Issuer = d.Get("issuer").(string)
+	}
+	if d.HasChange("discovery_url") {
+		s := d.Get("discovery_url").(string)
+		template.DiscoveryURL = &s
+	}
+	if d.HasChange("authorization_url") {
+		template.AuthorizationURL = d.Get("authorization_url").(string)
+	}
+	if d.HasChange("token_url") {
+		template.TokenURL = d.Get("token_url").(string)
+	}
+	if d.HasChange("userinfo_url") {
+		template.UserinfoURL = d.Get("userinfo_url").(string)
+	}
+	if d.HasChange("jwks_uri") {
+		s := d.Get("jwks_uri").(string)
+		template.JwksURI = &s
+	}
+	if d.HasChange("pkce_enabled") {
+		b := d.Get("pkce_enabled").(bool)
+		template.PKCEEnabled = &b
+	}
+	if d.HasChange("enabled") {
+		b := d.Get("enabled").(bool)
+		template.Enabled = &b
+	}
+	if d.HasChange("email_optional") {
+		b := d.Get("email_optional").(bool)
+		template.EmailOptional = &b
+	}
+	if d.HasChange("skip_nonce_check") {
+		b := d.Get("skip_nonce_check").(bool)
+		template.SkipNonceCheck = &b
+	}
+	if d.HasChange("scopes") {
+		raw := d.Get("scopes").([]interface{})
+		scopes := make([]string, len(raw))
+		for i, s := range raw {
+			scopes[i] = s.(string)
+		}
+		template.Scopes = scopes
+	}
+	if d.HasChange("acceptable_client_ids") {
+		raw := d.Get("acceptable_client_ids").([]interface{})
+		ids := make([]string, len(raw))
+		for i, s := range raw {
+			ids[i] = s.(string)
+		}
+		template.AcceptableClientIDs = ids
+	}
+	if d.HasChange("authorization_params") {
+		if v, ok := d.GetOk("authorization_params"); ok && v.(string) != "" {
+			var params map[string]interface{}
+			if err := json.Unmarshal([]byte(v.(string)), &params); err != nil {
+				return diag.FromErr(err)
+			}
+			template.AuthorizationParams = params
+		}
+	}
+
+	provider, err := client.UpdateCustomOAuthProvider(ctx, d.Id(), template)
+	if err != nil {
+		return diag.FromErr(err)
+	}
+
+	return resourceCustomOAuthProviderSet(provider, d)
+}
+
+func resourceCustomOAuthProviderDelete(ctx context.Context, d *schema.ResourceData, m interface{}) diag.Diagnostics {
+	client := m.(adminclient.Client)
+
+	if err := client.DeleteCustomOAuthProvider(ctx, d.Id()); err != nil {
+		return diag.FromErr(err)
+	}
+
+	d.SetId("")
+
+	return nil
+}
+
+func resourceCustomOAuthProvider() *schema.Resource {
+	validateJSON := func(value interface{}, path cty.Path) diag.Diagnostics {
+		var diags diag.Diagnostics
+		var out map[string]interface{}
+		if err := json.Unmarshal([]byte(value.(string)), &out); err != nil {
+			diags = append(diags, diag.Diagnostic{
+				Severity: diag.Error,
+				Summary:  "Value must be valid JSON",
+				Detail:   fmt.Sprintf("JSON parsing failed: %v", err.Error()),
+			})
+		}
+		return diags
+	}
+
+	return &schema.Resource{
+		CreateContext: resourceCustomOAuthProviderCreate,
+		ReadContext:   resourceCustomOAuthProviderRead,
+		UpdateContext: resourceCustomOAuthProviderUpdate,
+		DeleteContext: resourceCustomOAuthProviderDelete,
+		Importer: &schema.ResourceImporter{
+			StateContext: schema.ImportStatePassthroughContext,
+		},
+		Schema: map[string]*schema.Schema{
+			"provider_type": {
+				Type:     schema.TypeString,
+				Required: true,
+				ForceNew: true,
+				ValidateDiagFunc: func(value interface{}, path cty.Path) diag.Diagnostics {
+					var diags diag.Diagnostics
+					v := value.(string)
+					if v != "oauth2" && v != "oidc" {
+						diags = append(diags, diag.Diagnostic{
+							Severity: diag.Error,
+							Summary:  fmt.Sprintf("provider_type must be \"oauth2\" or \"oidc\", got %q", v),
+						})
+					}
+					return diags
+				},
+			},
+			"identifier": {
+				Type:     schema.TypeString,
+				Required: true,
+				ForceNew: true,
+				ValidateDiagFunc: func(value interface{}, path cty.Path) diag.Diagnostics {
+					var diags diag.Diagnostics
+					if !customIdentPattern.MatchString(value.(string)) {
+						diags = append(diags, diag.Diagnostic{
+							Severity: diag.Error,
+							Summary:  fmt.Sprintf("identifier must start with \"custom:\", got %q", value.(string)),
+						})
+					}
+					return diags
+				},
+			},
+			"name": {
+				Type:     schema.TypeString,
+				Required: true,
+			},
+			"client_id": {
+				Type:     schema.TypeString,
+				Required: true,
+			},
+			"client_secret": {
+				Type:      schema.TypeString,
+				Required:  true,
+				Sensitive: true,
+			},
+			"acceptable_client_ids": {
+				Type:     schema.TypeList,
+				Optional: true,
+				Elem:     &schema.Schema{Type: schema.TypeString},
+			},
+			"scopes": {
+				Type:     schema.TypeList,
+				Optional: true,
+				Computed: true,
+				Elem:     &schema.Schema{Type: schema.TypeString},
+			},
+			"pkce_enabled": {
+				Type:     schema.TypeBool,
+				Optional: true,
+				Computed: true,
+			},
+			"authorization_params": {
+				Type:             schema.TypeString,
+				Optional:         true,
+				ValidateDiagFunc: validateJSON,
+			},
+			"enabled": {
+				Type:     schema.TypeBool,
+				Optional: true,
+				Computed: true,
+			},
+			"email_optional": {
+				Type:     schema.TypeBool,
+				Optional: true,
+				Computed: true,
+			},
+			"issuer": {
+				Type:     schema.TypeString,
+				Optional: true,
+			},
+			"discovery_url": {
+				Type:     schema.TypeString,
+				Optional: true,
+			},
+			"skip_nonce_check": {
+				Type:     schema.TypeBool,
+				Optional: true,
+				Computed: true,
+			},
+			"authorization_url": {
+				Type:     schema.TypeString,
+				Optional: true,
+			},
+			"token_url": {
+				Type:     schema.TypeString,
+				Optional: true,
+			},
+			"userinfo_url": {
+				Type:     schema.TypeString,
+				Optional: true,
+			},
+			"jwks_uri": {
+				Type:     schema.TypeString,
+				Optional: true,
+			},
+			"id": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"discovery_document": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+		},
+	}
+}
 
 func resourceIdentityProvider() *schema.Resource {
 	return &schema.Resource{
@@ -321,6 +734,7 @@ func Provider() *schema.Provider {
 		},
 		ResourcesMap: map[string]*schema.Resource{
 			"gotrue_saml_identity_provider": resourceIdentityProvider(),
+			"gotrue_custom_oauth_provider":  resourceCustomOAuthProvider(),
 		},
 	}
 

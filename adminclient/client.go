@@ -17,6 +17,11 @@ type Client interface {
 	CreateIdentityProvider(ctx context.Context, template *IdentityProviderRequest) (*IdentityProviderResponse, error)
 	UpdateIdentityProvider(ctx context.Context, id string, template *IdentityProviderRequest) (*IdentityProviderResponse, error)
 	DeleteIdentityProvider(ctx context.Context, id string) error
+
+	GetCustomOAuthProvider(ctx context.Context, identifier string) (*CustomOAuthProviderResponse, error)
+	CreateCustomOAuthProvider(ctx context.Context, req *CustomOAuthProviderRequest) (*CustomOAuthProviderResponse, error)
+	UpdateCustomOAuthProvider(ctx context.Context, identifier string, req *CustomOAuthProviderRequest) (*CustomOAuthProviderResponse, error)
+	DeleteCustomOAuthProvider(ctx context.Context, identifier string) error
 }
 
 type HTTPClient interface {
@@ -240,6 +245,179 @@ func (c *client) DeleteIdentityProvider(ctx context.Context, id string) error {
 
 	if res.StatusCode != http.StatusOK {
 		return parseError(res, http.StatusOK, fmt.Sprintf("deleting identity provider with ID %q", id))
+	}
+
+	return nil
+}
+
+type CustomOAuthProviderRequest struct {
+	ProviderType        string                 `json:"provider_type,omitempty"`
+	Identifier          string                 `json:"identifier,omitempty"`
+	Name                string                 `json:"name,omitempty"`
+	ClientID            string                 `json:"client_id,omitempty"`
+	ClientSecret        string                 `json:"client_secret,omitempty"`
+	AcceptableClientIDs []string               `json:"acceptable_client_ids,omitempty"`
+	Scopes              []string               `json:"scopes,omitempty"`
+	PKCEEnabled         *bool                  `json:"pkce_enabled,omitempty"`
+	AuthorizationParams map[string]interface{} `json:"authorization_params,omitempty"`
+	Enabled             *bool                  `json:"enabled,omitempty"`
+	EmailOptional       *bool                  `json:"email_optional,omitempty"`
+	Issuer              string                 `json:"issuer,omitempty"`
+	DiscoveryURL        *string                `json:"discovery_url,omitempty"`
+	SkipNonceCheck      *bool                  `json:"skip_nonce_check,omitempty"`
+	AuthorizationURL    string                 `json:"authorization_url,omitempty"`
+	TokenURL            string                 `json:"token_url,omitempty"`
+	UserinfoURL         string                 `json:"userinfo_url,omitempty"`
+	JwksURI             *string                `json:"jwks_uri,omitempty"`
+}
+
+type CustomOAuthProviderResponse struct {
+	ID                  string                 `json:"id,omitempty"`
+	ProviderType        string                 `json:"provider_type,omitempty"`
+	Identifier          string                 `json:"identifier,omitempty"`
+	Name                string                 `json:"name,omitempty"`
+	ClientID            string                 `json:"client_id,omitempty"`
+	AcceptableClientIDs []string               `json:"acceptable_client_ids,omitempty"`
+	Scopes              []string               `json:"scopes,omitempty"`
+	PKCEEnabled         *bool                  `json:"pkce_enabled,omitempty"`
+	AttributeMapping    map[string]interface{} `json:"attribute_mapping,omitempty"`
+	AuthorizationParams map[string]interface{} `json:"authorization_params,omitempty"`
+	Enabled             *bool                  `json:"enabled,omitempty"`
+	EmailOptional       *bool                  `json:"email_optional,omitempty"`
+	Issuer              string                 `json:"issuer,omitempty"`
+	DiscoveryURL        *string                `json:"discovery_url,omitempty"`
+	SkipNonceCheck      *bool                  `json:"skip_nonce_check,omitempty"`
+	AuthorizationURL    string                 `json:"authorization_url,omitempty"`
+	TokenURL            string                 `json:"token_url,omitempty"`
+	UserinfoURL         string                 `json:"userinfo_url,omitempty"`
+	JwksURI             *string                `json:"jwks_uri,omitempty"`
+	DiscoveryDocument   json.RawMessage        `json:"discovery_document,omitempty"`
+	CreatedAt           time.Time              `json:"created_at,omitempty"`
+	UpdatedAt           time.Time              `json:"updated_at,omitempty"`
+}
+
+func (c *client) GetCustomOAuthProvider(ctx context.Context, identifier string) (*CustomOAuthProviderResponse, error) {
+	rawURL := c.BaseURL.String() + "/admin/custom-providers/" + url.PathEscape(identifier)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header = c.Headers.Clone()
+
+	res, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return nil, parseError(res, http.StatusOK, fmt.Sprintf("fetching custom OAuth provider with identifier %q", identifier))
+	}
+
+	provider := &CustomOAuthProviderResponse{}
+
+	if err := json.NewDecoder(res.Body).Decode(provider); err != nil {
+		return nil, err
+	}
+
+	return provider, nil
+}
+
+func (c *client) CreateCustomOAuthProvider(ctx context.Context, template *CustomOAuthProviderRequest) (*CustomOAuthProviderResponse, error) {
+	url := c.BaseURL
+	url.Path += "/admin/custom-providers"
+
+	buffer := bytes.NewBuffer(make([]byte, 0))
+	if err := json.NewEncoder(buffer).Encode(template); err != nil { // #nosec G117 -- intentionally marshaling client_secret in API request body
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url.String(), buffer)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header = c.Headers.Clone()
+	req.Header.Add("Content-Type", "application/json")
+
+	res, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusCreated {
+		return nil, parseError(res, http.StatusCreated, "creating new custom OAuth provider")
+	}
+
+	provider := &CustomOAuthProviderResponse{}
+
+	if err := json.NewDecoder(res.Body).Decode(provider); err != nil {
+		return nil, err
+	}
+
+	return provider, nil
+}
+
+func (c *client) UpdateCustomOAuthProvider(ctx context.Context, identifier string, template *CustomOAuthProviderRequest) (*CustomOAuthProviderResponse, error) {
+	rawURL := c.BaseURL.String() + "/admin/custom-providers/" + url.PathEscape(identifier)
+
+	buffer := bytes.NewBuffer(make([]byte, 0))
+	if err := json.NewEncoder(buffer).Encode(template); err != nil { // #nosec G117 -- intentionally marshaling client_secret in API request body
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, rawURL, buffer)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header = c.Headers.Clone()
+	req.Header.Add("Content-Type", "application/json")
+
+	res, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return nil, parseError(res, http.StatusOK, fmt.Sprintf("updating custom OAuth provider with identifier %q", identifier))
+	}
+
+	provider := &CustomOAuthProviderResponse{}
+
+	if err := json.NewDecoder(res.Body).Decode(provider); err != nil {
+		return nil, err
+	}
+
+	return provider, nil
+}
+
+func (c *client) DeleteCustomOAuthProvider(ctx context.Context, identifier string) error {
+	rawURL := c.BaseURL.String() + "/admin/custom-providers/" + url.PathEscape(identifier)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, rawURL, nil)
+	if err != nil {
+		return err
+	}
+
+	req.Header = c.Headers.Clone()
+
+	res, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusNoContent {
+		return parseError(res, http.StatusNoContent, fmt.Sprintf("deleting custom OAuth provider with identifier %q", identifier))
 	}
 
 	return nil
