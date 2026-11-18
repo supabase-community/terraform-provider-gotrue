@@ -251,49 +251,57 @@ func (c *client) DeleteIdentityProvider(ctx context.Context, id string) error {
 }
 
 type CustomOAuthProviderRequest struct {
-	ProviderType        string                 `json:"provider_type,omitempty"`
-	Identifier          string                 `json:"identifier,omitempty"`
-	Name                string                 `json:"name,omitempty"`
-	ClientID            string                 `json:"client_id,omitempty"`
-	ClientSecret        string                 `json:"client_secret,omitempty"`
-	AcceptableClientIDs []string               `json:"acceptable_client_ids,omitempty"`
-	Scopes              []string               `json:"scopes,omitempty"`
-	PKCEEnabled         *bool                  `json:"pkce_enabled,omitempty"`
-	AuthorizationParams map[string]interface{} `json:"authorization_params,omitempty"`
-	Enabled             *bool                  `json:"enabled,omitempty"`
-	EmailOptional       *bool                  `json:"email_optional,omitempty"`
-	Issuer              string                 `json:"issuer,omitempty"`
-	DiscoveryURL        *string                `json:"discovery_url,omitempty"`
-	SkipNonceCheck      *bool                  `json:"skip_nonce_check,omitempty"`
-	AuthorizationURL    string                 `json:"authorization_url,omitempty"`
-	TokenURL            string                 `json:"token_url,omitempty"`
-	UserinfoURL         string                 `json:"userinfo_url,omitempty"`
-	JwksURI             *string                `json:"jwks_uri,omitempty"`
+	ProviderType string `json:"provider_type,omitempty"`
+	Identifier   string `json:"identifier,omitempty"`
+	Name         string `json:"name,omitempty"`
+	ClientID     string `json:"client_id,omitempty"`
+	ClientSecret string `json:"client_secret,omitempty"`
+	// ClientAuthMethod is "client_secret" or "private_key_jwt". Omitted means
+	// the server default on create and "unchanged" on update.
+	ClientAuthMethod string `json:"client_auth_method,omitempty"`
+	// ClientAssertionAudience overrides the aud claim of client assertions.
+	// On update, nil keeps the current value and "" clears it.
+	ClientAssertionAudience *string                `json:"client_assertion_audience,omitempty"`
+	AcceptableClientIDs     []string               `json:"acceptable_client_ids,omitempty"`
+	Scopes                  []string               `json:"scopes,omitempty"`
+	PKCEEnabled             *bool                  `json:"pkce_enabled,omitempty"`
+	AuthorizationParams     map[string]interface{} `json:"authorization_params,omitempty"`
+	Enabled                 *bool                  `json:"enabled,omitempty"`
+	EmailOptional           *bool                  `json:"email_optional,omitempty"`
+	Issuer                  string                 `json:"issuer,omitempty"`
+	DiscoveryURL            *string                `json:"discovery_url,omitempty"`
+	SkipNonceCheck          *bool                  `json:"skip_nonce_check,omitempty"`
+	AuthorizationURL        string                 `json:"authorization_url,omitempty"`
+	TokenURL                string                 `json:"token_url,omitempty"`
+	UserinfoURL             string                 `json:"userinfo_url,omitempty"`
+	JwksURI                 *string                `json:"jwks_uri,omitempty"`
 }
 
 type CustomOAuthProviderResponse struct {
-	ID                  string                 `json:"id,omitempty"`
-	ProviderType        string                 `json:"provider_type,omitempty"`
-	Identifier          string                 `json:"identifier,omitempty"`
-	Name                string                 `json:"name,omitempty"`
-	ClientID            string                 `json:"client_id,omitempty"`
-	AcceptableClientIDs []string               `json:"acceptable_client_ids,omitempty"`
-	Scopes              []string               `json:"scopes,omitempty"`
-	PKCEEnabled         *bool                  `json:"pkce_enabled,omitempty"`
-	AttributeMapping    map[string]interface{} `json:"attribute_mapping,omitempty"`
-	AuthorizationParams map[string]interface{} `json:"authorization_params,omitempty"`
-	Enabled             *bool                  `json:"enabled,omitempty"`
-	EmailOptional       *bool                  `json:"email_optional,omitempty"`
-	Issuer              string                 `json:"issuer,omitempty"`
-	DiscoveryURL        *string                `json:"discovery_url,omitempty"`
-	SkipNonceCheck      *bool                  `json:"skip_nonce_check,omitempty"`
-	AuthorizationURL    string                 `json:"authorization_url,omitempty"`
-	TokenURL            string                 `json:"token_url,omitempty"`
-	UserinfoURL         string                 `json:"userinfo_url,omitempty"`
-	JwksURI             *string                `json:"jwks_uri,omitempty"`
-	DiscoveryDocument   json.RawMessage        `json:"discovery_document,omitempty"`
-	CreatedAt           time.Time              `json:"created_at,omitempty"`
-	UpdatedAt           time.Time              `json:"updated_at,omitempty"`
+	ID                      string                 `json:"id,omitempty"`
+	ProviderType            string                 `json:"provider_type,omitempty"`
+	Identifier              string                 `json:"identifier,omitempty"`
+	Name                    string                 `json:"name,omitempty"`
+	ClientID                string                 `json:"client_id,omitempty"`
+	ClientAuthMethod        string                 `json:"client_auth_method,omitempty"`
+	ClientAssertionAudience *string                `json:"client_assertion_audience,omitempty"`
+	AcceptableClientIDs     []string               `json:"acceptable_client_ids,omitempty"`
+	Scopes                  []string               `json:"scopes,omitempty"`
+	PKCEEnabled             *bool                  `json:"pkce_enabled,omitempty"`
+	AttributeMapping        map[string]interface{} `json:"attribute_mapping,omitempty"`
+	AuthorizationParams     map[string]interface{} `json:"authorization_params,omitempty"`
+	Enabled                 *bool                  `json:"enabled,omitempty"`
+	EmailOptional           *bool                  `json:"email_optional,omitempty"`
+	Issuer                  string                 `json:"issuer,omitempty"`
+	DiscoveryURL            *string                `json:"discovery_url,omitempty"`
+	SkipNonceCheck          *bool                  `json:"skip_nonce_check,omitempty"`
+	AuthorizationURL        string                 `json:"authorization_url,omitempty"`
+	TokenURL                string                 `json:"token_url,omitempty"`
+	UserinfoURL             string                 `json:"userinfo_url,omitempty"`
+	JwksURI                 *string                `json:"jwks_uri,omitempty"`
+	DiscoveryDocument       json.RawMessage        `json:"discovery_document,omitempty"`
+	CreatedAt               time.Time              `json:"created_at,omitempty"`
+	UpdatedAt               time.Time              `json:"updated_at,omitempty"`
 }
 
 func (c *client) GetCustomOAuthProvider(ctx context.Context, identifier string) (*CustomOAuthProviderResponse, error) {

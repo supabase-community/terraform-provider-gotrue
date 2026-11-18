@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/go-cty/cty"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 
 	"github.com/supabase-community/terraform-provider-gotrue/adminclient"
 )
@@ -202,21 +203,34 @@ func resourceCustomOAuthProviderSet(provider *adminclient.CustomOAuthProviderRes
 		skipNonceCheck = *provider.SkipNonceCheck
 	}
 
+	// Servers that predate client_auth_method only support client secrets.
+	clientAuthMethod := provider.ClientAuthMethod
+	if clientAuthMethod == "" {
+		clientAuthMethod = clientAuthMethodClientSecret
+	}
+
+	clientAssertionAudience := ""
+	if provider.ClientAssertionAudience != nil {
+		clientAssertionAudience = *provider.ClientAssertionAudience
+	}
+
 	fields := map[string]interface{}{
-		"provider_type":     provider.ProviderType,
-		"identifier":        provider.Identifier,
-		"name":              provider.Name,
-		"client_id":         provider.ClientID,
-		"issuer":            provider.Issuer,
-		"discovery_url":     discoveryURL,
-		"authorization_url": provider.AuthorizationURL,
-		"token_url":         provider.TokenURL,
-		"userinfo_url":      provider.UserinfoURL,
-		"jwks_uri":          jwksURI,
-		"pkce_enabled":      pkceEnabled,
-		"enabled":           enabled,
-		"email_optional":    emailOptional,
-		"skip_nonce_check":  skipNonceCheck,
+		"provider_type":             provider.ProviderType,
+		"identifier":                provider.Identifier,
+		"name":                      provider.Name,
+		"client_id":                 provider.ClientID,
+		"client_auth_method":        clientAuthMethod,
+		"client_assertion_audience": clientAssertionAudience,
+		"issuer":                    provider.Issuer,
+		"discovery_url":             discoveryURL,
+		"authorization_url":         provider.AuthorizationURL,
+		"token_url":                 provider.TokenURL,
+		"userinfo_url":              provider.UserinfoURL,
+		"jwks_uri":                  jwksURI,
+		"pkce_enabled":              pkceEnabled,
+		"enabled":                   enabled,
+		"email_optional":            emailOptional,
+		"skip_nonce_check":          skipNonceCheck,
 	}
 
 	for k, v := range fields {
@@ -276,6 +290,16 @@ func resourceCustomOAuthProviderCreate(ctx context.Context, d *schema.ResourceDa
 		Name:         d.Get("name").(string),
 		ClientID:     d.Get("client_id").(string),
 		ClientSecret: d.Get("client_secret").(string),
+	}
+
+	// Omit the default method so servers that predate client_auth_method
+	// still accept the request.
+	if v := d.Get("client_auth_method").(string); v != clientAuthMethodClientSecret {
+		template.ClientAuthMethod = v
+	}
+	if v, ok := d.GetOk("client_assertion_audience"); ok {
+		s := v.(string)
+		template.ClientAssertionAudience = &s
 	}
 
 	if v, ok := d.GetOk("issuer"); ok {
@@ -360,6 +384,17 @@ func resourceCustomOAuthProviderUpdate(ctx context.Context, d *schema.ResourceDa
 			template.ClientSecret = v
 		}
 	}
+	clientAuthMethod := d.Get("client_auth_method").(string)
+	if d.HasChange("client_auth_method") {
+		template.ClientAuthMethod = clientAuthMethod
+	}
+	// The server clears the audience itself when switching to client_secret,
+	// and rejects any audience (even "") while client assertions are disabled,
+	// so only send it for private_key_jwt providers.
+	if clientAuthMethod == clientAuthMethodPrivateKeyJWT && d.HasChange("client_assertion_audience") {
+		s := d.Get("client_assertion_audience").(string)
+		template.ClientAssertionAudience = &s
+	}
 	if d.HasChange("issuer") {
 		template.Issuer = d.Get("issuer").(string)
 	}
@@ -442,6 +477,47 @@ func resourceCustomOAuthProviderDelete(ctx context.Context, d *schema.ResourceDa
 	return nil
 }
 
+const (
+	clientAuthMethodClientSecret  = "client_secret"
+	clientAuthMethodPrivateKeyJWT = "private_key_jwt"
+)
+
+// validateCustomOAuthProviderClientAuth mirrors the server's rules for
+// client_auth_method so invalid combinations fail at plan time. Values that are
+// unknown until apply are left for the server to check.
+func validateCustomOAuthProviderClientAuth(ctx context.Context, d *schema.ResourceDiff, m interface{}) error {
+	if !d.NewValueKnown("client_auth_method") {
+		return nil
+	}
+
+	known := func(key string) (string, bool) {
+		if !d.NewValueKnown(key) {
+			return "", false
+		}
+		return d.Get(key).(string), true
+	}
+
+	switch d.Get("client_auth_method").(string) {
+	case clientAuthMethodClientSecret:
+		if v, ok := known("client_secret"); ok && v == "" {
+			return fmt.Errorf("client_secret is required when client_auth_method is %q", clientAuthMethodClientSecret)
+		}
+		if v, ok := known("client_assertion_audience"); ok && v != "" {
+			return fmt.Errorf("client_assertion_audience is only supported with client_auth_method %q", clientAuthMethodPrivateKeyJWT)
+		}
+
+	case clientAuthMethodPrivateKeyJWT:
+		if v, ok := known("client_secret"); ok && v != "" {
+			return fmt.Errorf("client_secret must not be set when client_auth_method is %q", clientAuthMethodPrivateKeyJWT)
+		}
+		if v, ok := known("provider_type"); ok && v != "oidc" {
+			return fmt.Errorf("client_auth_method %q is only supported for OIDC providers", clientAuthMethodPrivateKeyJWT)
+		}
+	}
+
+	return nil
+}
+
 func resourceCustomOAuthProvider() *schema.Resource {
 	validateJSON := func(value interface{}, path cty.Path) diag.Diagnostics {
 		var diags diag.Diagnostics
@@ -464,6 +540,7 @@ func resourceCustomOAuthProvider() *schema.Resource {
 		Importer: &schema.ResourceImporter{
 			StateContext: schema.ImportStatePassthroughContext,
 		},
+		CustomizeDiff: validateCustomOAuthProviderClientAuth,
 		Schema: map[string]*schema.Schema{
 			"provider_type": {
 				Type:     schema.TypeString,
@@ -505,9 +582,26 @@ func resourceCustomOAuthProvider() *schema.Resource {
 				Required: true,
 			},
 			"client_secret": {
-				Type:      schema.TypeString,
-				Required:  true,
-				Sensitive: true,
+				Type:        schema.TypeString,
+				Optional:    true,
+				Sensitive:   true,
+				Description: "OAuth client secret. Required when client_auth_method is \"client_secret\", and must not be set when it is \"private_key_jwt\".",
+			},
+			"client_auth_method": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Default:  clientAuthMethodClientSecret,
+				ValidateDiagFunc: validation.ToDiagFunc(validation.StringInSlice([]string{
+					clientAuthMethodClientSecret,
+					clientAuthMethodPrivateKeyJWT,
+				}, false)),
+				Description: "How GoTrue authenticates to the provider's token endpoint: \"client_secret\" (default) or \"private_key_jwt\" (signed client assertion, RFC 7523). \"private_key_jwt\" is only available for OIDC providers when client assertions are enabled on the server.",
+			},
+			"client_assertion_audience": {
+				Type:             schema.TypeString,
+				Optional:         true,
+				ValidateDiagFunc: validation.ToDiagFunc(validation.StringLenBetween(1, 2048)),
+				Description:      "Overrides the aud claim of client assertions, which defaults to the provider's issuer. Only allowed with client_auth_method \"private_key_jwt\".",
 			},
 			"acceptable_client_ids": {
 				Type:     schema.TypeList,
