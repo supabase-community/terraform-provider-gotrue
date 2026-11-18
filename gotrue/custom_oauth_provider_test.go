@@ -268,6 +268,43 @@ func TestCustomOAuthProviderUpdateClientAuth(t *testing.T) {
 			},
 		},
 		{
+			// The method was changed outside Terraform; state still holds the
+			// configured secret, so client_secret itself shows no change.
+			name: "switch to client_secret with unchanged secret still sends it",
+			state: &terraform.InstanceState{
+				ID: "custom:acme",
+				Attributes: with2(pkjwtState.Attributes, map[string]string{
+					"client_assertion_audience": "",
+					"client_secret":             "s",
+				}),
+			},
+			config: with(baseOIDCConfig(), map[string]interface{}{
+				"client_secret": "s",
+			}),
+			want: map[string]interface{}{
+				"client_auth_method": "client_secret",
+				"client_secret":      "s",
+			},
+		},
+		{
+			// State written by provider versions before client_auth_method.
+			name: "old state without method does not send the default",
+			state: &terraform.InstanceState{
+				ID: "custom:acme",
+				Attributes: with2(secretState.Attributes, map[string]string{
+					"client_auth_method": "",
+					"client_secret":      "s",
+				}),
+			},
+			config: with(baseOIDCConfig(), map[string]interface{}{
+				"client_secret": "s",
+			}),
+			want: map[string]interface{}{
+				"client_auth_method": nil,
+				"client_secret":      nil,
+			},
+		},
+		{
 			name:  "changing audience",
 			state: pkjwtState,
 			config: with(baseOIDCConfig(), map[string]interface{}{

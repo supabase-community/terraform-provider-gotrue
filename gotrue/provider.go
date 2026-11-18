@@ -386,7 +386,19 @@ func resourceCustomOAuthProviderUpdate(ctx context.Context, d *schema.ResourceDa
 	}
 	clientAuthMethod := d.Get("client_auth_method").(string)
 	if d.HasChange("client_auth_method") {
-		template.ClientAuthMethod = clientAuthMethod
+		oldMethod, _ := d.GetChange("client_auth_method")
+		// State from provider versions before client_auth_method has no value.
+		// Moving it to the default is not a real change, and the server may
+		// not know the field, so don't send it.
+		if !(oldMethod.(string) == "" && clientAuthMethod == clientAuthMethodClientSecret) {
+			template.ClientAuthMethod = clientAuthMethod
+		}
+		// The server never returns the secret, so state may still hold the
+		// configured one and client_secret shows no change. The server
+		// requires it when switching to client_secret, so always send it.
+		if template.ClientAuthMethod == clientAuthMethodClientSecret {
+			template.ClientSecret = d.Get("client_secret").(string)
+		}
 	}
 	// The server clears the audience itself when switching to client_secret,
 	// and rejects any audience (even "") while client assertions are disabled,
